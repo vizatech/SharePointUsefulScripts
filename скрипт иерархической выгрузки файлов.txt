@@ -1,0 +1,74 @@
+$webURL = "http://xrm/Marketing"
+$root = "C:\\SaveXRMDoc"
+$web = Get-SPWeb -Identity $webURL
+$Tab = [char]9
+$Return = [char]13
+$DestinationPath = $root
+
+function CreateFolderIfNotExists 
+{
+    	param($folderToCreate)
+	New-Item -ItemType Directory -Force -Path $folderToCreate
+}
+
+function DownLoadFile 
+{
+    	param($file)
+        $binary = $file.OpenBinary()
+        $stream = New-Object System.IO.FileStream($DestinationPath + "\" + $file.Name), Create
+        $writer = New-Object System.IO.BinaryWriter($stream)
+        $writer.write($binary)
+        $writer.Close()
+}
+
+function GetSubFolders 
+{
+    	param($folderUrl)
+    	$currentFolder = $web.GetFolder($folderUrl)
+	$folderCollection = $currentFolder.SubFolders
+	    	foreach ($folder in $folderCollection) 
+		{
+				Write-Host $Tab $Tab "FolderURL: " $webURL $folder.Url -f white
+				$destination = $root + "\" + $folder.Url
+				CreateFolderIfNotExists($destination)
+				$DestinationPath = $destination -replace '/','\' 
+				GetSubFiles($folderUrl)
+
+				GetSubFolders($folder.Url)
+	    	}
+}
+
+function GetSubFiles 
+{
+    	param($folderUrlSource)
+    	$currentFolder = $web.GetFolder($folderUrlSource)
+	$fileCollection = $currentFolder.Files
+		foreach ($file in $fileCollection)
+		{
+			Write-Host $Tab $Tab "FileToBeCopied: " $file.Name -f green
+			Write-Host $Tab $Tab "FileDestination: " $DestinationPath -f white
+
+			DownLoadFile($file)
+		}
+}
+
+
+foreach ($list in $web.Lists) 
+{	
+	If ($list.BaseType -eq "DocumentLibrary") 
+	{
+		$listName = $list.RootFolder.Name
+		$folder = $list.RootFolder.Url
+
+		Write-Host $Tab "WebPartName: " $list.Title -f white -b blue
+		Write-Host $Tab "RootFolder: " $listName
+		Write-Host $Tab "RootUrl: " $folder
+
+		GetSubFolders($folder)
+		GetSubFiles($folder)
+
+		Write-Host $Tab "Library: " $listName " proseed seccessfull" -f yellow -b blue
+		Write-Host ""
+	} 
+}
+Write-Host "Process finished" -f magenta

@@ -1,0 +1,85 @@
+param(
+    $vars = @{
+        "BillingSiteUrl" = "http://ourdomain.com/sites/subsite1"
+    }
+)
+ 
+ 
+function Reset-RoleInheritance {
+    param(
+        [Microsoft.SharePoint.SPListItem]$listItem
+    )
+ 
+    if(-not $listItem.HasUniqueRoleAssignments) {
+        Write-Host "No unique permissions on" $listItem.Name
+        return
+    }
+ 
+    foreach($roleAssignment in $listItem.RoleAssignments) {
+        $roleDefinitionBindings = $roleAssignment.RoleDefinitionBindings | % { $_.Name }
+        $roleDefinitionBindingsString = [String]::Join("|",$roleDefinitionBindings)
+        $logMessage = ("{0};{1};{2}" -f $listItem.Name, $roleAssignment.Member.ToString(), $roleDefinitionBindingsString)
+ 
+        Add-Content -Path "roleAssignments.log" -Value $logMessage
+    }
+ 
+    $listItem.ResetRoleInheritance()
+ 
+    Write-Host "Unique permissions removed on" $listItem.Name
+}
+ 
+# Variables
+ 
+$siteUrl = $vars["SiteUrl"]
+$web = Get-SPWeb $siteUrl
+ 
+$list = "ListName"
+ 
+$statusFieldName = "StatusColumn"
+$completedStatusValue = "Completed"
+ 
+$listref = $web.Lists[$list]
+ 
+### Check in all the files
+ 
+#Check-InAllFiles $billCyclesList
+ 
+### Get All Completed Document Sets Query
+ 
+$query = New-Object Microsoft.SharePoint.SPQuery;
+$query.Query =
+("   <Where>
+        <And>
+            <Eq>
+                <FieldRef Name='{0}' />
+                <Value Type='Text'>{1}</Value>
+            </Eq>
+            <Eq>
+                <FieldRef Name='Is_x0020_Confidential_x003F_' />
+                <Value Type='Boolean'>0</Value>
+            </Eq>
+         </And>
+    </Where>" -f $statusFieldName, $completedStatusValue
+);
+$query.RowLimit = 100
+ 
+$batch = 0
+ 
+do {
+      
+    $items = $listref.GetItems($query);
+ 
+    foreach($docSet in $items) {
+ 
+        Reset-RoleInheritance $docSet
+    }
+ 
+    $query.ListItemCollectionPosition = $items.ListItemCollectionPosition
+    $batch += 1
+    Write-Host "Processed batch" $batch
+ 
+    if($items.ListItemCollectionPosition -ne $null) {
+        Write-Host $items.ListItemCollectionPosition.PagingInfo
+    }
+        
+} while($query.ListItemCollectionPosition -ne $null)
